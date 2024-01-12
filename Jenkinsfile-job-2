@@ -1,0 +1,85 @@
+#Create Pipeline job to run the docker container in the new ec2 instance. 
+#For this, connect to an instance from pipeline job, check if git,docker is installed and if not then install git and docker,
+# build the docker image, 
+# run the docker container and print the application output using curl command.
+
+pipeline {
+    agent any
+
+    environment {
+        EC2_INSTANCE_IP = '3.92.179.142'
+        EC2_INSTANCE_SSH_CREDENTIALS_ID = 'ec2-user-cred'
+    }
+
+    stages {
+        stage('Connect to EC2 Instance') {
+            steps {
+                script {
+                    sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                        sh "ssh -o StrictHostKeyChecking=no ec2-user@${EC2_INSTANCE_IP} 'echo Connected to EC2 instance'"
+                    }
+                }
+            }
+        }
+
+        stage('Check and Install git') {
+            steps {
+                script {
+                    sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                        def isGitInstalled = sh(script: 'ssh ec2-user@${EC2_INSTANCE_IP} command -v git', returnStatus: true)
+                        if (isGitInstalled != 0) {
+                            sh """
+                                ssh ec2-user@${EC2_INSTANCE_IP} 'sudo yum install -y git'
+                                ssh ec2-user@${EC2_INSTANCE_IP} 'git clone https://github.com/raghuck/food-menu-staticwebsite.git'
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+      stage('Check and Install Docker') {
+            steps {
+                script {
+                    sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                        def isDockerInstalled = sh(script: 'ssh ec2-user@${EC2_INSTANCE_IP} command -v docker', returnStatus: true)
+                        if (isDockerInstalled != 0) {
+                            sh """
+                                ssh ec2-user@${EC2_INSTANCE_IP} 'sudo yum install -y docker'
+                                ssh ec2-user@${EC2_INSTANCE_IP} 'sudo service docker start'
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+     stage('Build Docker image') {
+            steps {
+                script {
+                    sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                        sh "ssh ec2-user@${EC2_INSTANCE_IP} 'docker build -t static-website /home/ec2-user/food-menu-staticwebsite'"
+                    }
+                }
+            }
+        }
+     stage('Run the container') {
+        steps{
+            script{
+                sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                   sh "ssh ec2-user@${EC2_INSTANCE_IP} 'docker run -d -p 6000:80 --name food-menu static-website'"
+                }
+            }
+        }         
+      }
+     stage('Print the container app output') {
+       steps {
+          script {
+             sshagent(credentials: [EC2_INSTANCE_SSH_CREDENTIALS_ID]) {
+                sh "curl http://3.92.179.142:6000"
+            }
+        }
+      }
+    }  
+    }
+}
