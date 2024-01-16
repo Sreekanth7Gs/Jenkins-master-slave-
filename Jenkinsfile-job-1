@@ -1,0 +1,34 @@
+pipeline {
+    agent {
+        label 'slave'
+    }
+    
+    stages {
+        stage('SCM checkout') {
+            steps {
+                script {
+                    git 'https://github.com/Sreekanth7Gs/simple-java-maven-app.git'
+                }
+            }
+        }
+
+       stage('Build Docker Image') {
+          steps {
+              script {
+                 sh "docker build -t sreekanth99490/simple-java-maven-app ."
+                }
+            }
+        }
+
+        stage('Push Image to DockerHub') {
+            steps {
+                script {
+                   withCredentials([string(credentialsId: 'docker-hub', variable: 'dockerHubPwd')]) {
+                    	sh "docker login -u sreekanth99490 -p ${dockerHubPwd}"
+                        sh "docker push sreekanth99490/simple-java-maven-app"
+                    }
+                }
+            }
+        }
+    }
+}
